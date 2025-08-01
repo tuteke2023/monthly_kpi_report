@@ -211,7 +211,9 @@ for staff in unique_staff:
         
 
 import pandas as pd
-import yagmail
+import requests
+import json
+import base64
 
 # Step 1: Load the Summary Table and Detailed Summary
 summary_file = excel_file  # Your main summary Excel file
@@ -225,10 +227,10 @@ email_list = pd.read_csv(email_file)
 # Step 3: Merge the Email List with the Summary Table
 summary_table = summary_table.merge(email_list, on="Staff", how="left")
 
-# Email Configuration
-sender_email = "@gmail.com"  # Replace with your Gmail address
-app_password = ""  # Replace with your Gmail App Password
-yag = yagmail.SMTP(user=sender_email, password=app_password)
+# SMTP2GO API Configuration
+api_key = "api-A90FFF85F5A343D288733CBE74F87141"
+api_url = "https://api.smtp2go.com/v3/email/send"
+sender_email = "Monthly KPI Report <noreply@ttaccountancy.com.au>"
 
 # Step 4: Iterate Over Staff and Send Emails
 for index, row in summary_table.iterrows():
@@ -281,10 +283,44 @@ for index, row in summary_table.iterrows():
         Performance Team
         """
 
-    # Step 8: Send Email
+    # Step 8: Send Email using SMTP2GO API
     try:
-        yag.send(to=email, subject=subject, contents=body, attachments=staff_file)
-        print(f"Email sent to {staff}: {email}")
+        # Read and encode the Excel file
+        with open(staff_file, 'rb') as f:
+            file_content = base64.b64encode(f.read()).decode('utf-8')
+        
+        # Prepare email data
+        email_data = {
+            "api_key": api_key,
+            "to": [email],
+            "sender": sender_email,
+            "subject": subject,
+            "text_body": body,
+            "attachments": [{
+                "filename": staff_file,
+                "fileblob": file_content,
+                "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }]
+        }
+        
+        # Send via API
+        headers = {
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Smtp2go-Api-Key": api_key
+        }
+        
+        response = requests.post(api_url, headers=headers, data=json.dumps(email_data))
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("data", {}).get("succeeded", 0) > 0:
+                print(f"Email sent to {staff}: {email}")
+            else:
+                print(f"Failed to send email to {staff}: {result}")
+        else:
+            print(f"Failed to send email to {staff}: HTTP {response.status_code}")
+            
     except Exception as e:
         print(f"Failed to send email to {staff}: {str(e)}")
 
